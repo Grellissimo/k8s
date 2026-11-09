@@ -54,3 +54,46 @@ Note: I keep all Yaml files in a subfolder named manifests for easier reference
    NAME      READY   UP-TO-DATE   AVAILABLE   AGE
    web-app   1/1     1            1           4m53s
    ```
+
+3. Scale up and down methods  
+    3.1 in line  
+        ```kubectl scale deployment web-app --replicas=5 -n demo-lab```  
+
+    3.2 edit deployment  
+        ```kubectl edit deployment web-app -n demo-lab```
+        make direct changes in the YAML file  
+    3.3 update the YAML file, set replicas: 5 and deploy
+        ```kubectl apply -f manifests/002-deployment.yaml```  
+    3.4 expected output  
+        ```kubectl get pods -n demo-lab```
+    ```
+    NAME                       READY   STATUS    RESTARTS   AGE  
+    web-app-69f8b8cf86-cc7hd   1/1     Running   0          22s  
+    web-app-69f8b8cf86-f2p7p   1/1     Running   0          22s      
+    web-app-69f8b8cf86-l87bz   1/1     Running   0          22s
+    web-app-69f8b8cf86-tt5q2   1/1     Running   0          22s
+    web-app-69f8b8cf86-zq8wl   1/1     Running   0          170m
+    ```
+        
+
+## Troubleshooting scenario
+
+Common issue: ImagePullBackOff
+
+1. Simulate issue where the image pointer is wrong  
+   ```kubectl set image deployment/web-app nginx=nginx:this-tag-does-not-exist -n demo-lab```  
+   OR  
+   Update the 002-deployment.yaml to point to the wrong image tag and apply (as above)
+2. Observe the failure  
+   ```kubectl get pods -n demo-lab```
+   ```
+   NAME                       READY   STATUS             RESTARTS   AGE
+   web-app-5df77999f-7zfhg    0/1     ErrImagePull       0          3m29s
+   web-app-5df77999f-8p8zw    0/1     ImagePullBackOff   0          3m29s
+   web-app-5df77999f-gr65r    0/1     ImagePullBackOff   0          3m29s
+   web-app-69f8b8cf86-cc7hd   1/1     Running            0          17m
+   web-app-69f8b8cf86-f2p7p   1/1     Running            0          17m
+   web-app-69f8b8cf86-l87bz   1/1     Running            0          17m
+   web-app-69f8b8cf86-zq8wl   1/1     Running            0          3h7m
+   ```
+3. Investigation  
