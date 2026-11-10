@@ -10,6 +10,12 @@ Testing k8s-git-kubectl-helm-argocd-prometheus-grafana
 4. Create a new k8s cluster if not already available. This can be done in many different ways, for simplicity, i'll use a KinD (kubernetes in docker) cluster directly created by docker desktop. A much professional solution would definitely be something like AWS EKS.  
 4.1 After waiting some minutes, run ```kubectl get nodes``` to ensure cluster is ready
 
+# Kubectl
+kubectl is the official command-line interface for communicating directly with the Kubernetes Control Plane API. While it is an indispensable tool for cluster administration, live querying, port-forwarding, and deep incident diagnostics (describe, logs), using manual kubectl apply commands for deploying applications is not considered a production best practice. Relying solely on raw manifests makes multi-environment management brittle and error-prone. In modern cloud-native engineering, kubectl is best reserved for operational triage and cluster inspection, while deployment workflows are delegated to specialized tooling—transitioning first to Helm for templating and packaging, and ultimately to ArgoCD for automated, declarative GitOps continuous delivery.  
+Useful info to write good YAML files and reference primitives  
+```kubectl api-resources``` will give you all info about APIversion and its kind.  
+```kubectl explain <resource>``` will give you even more information for a specific resource.  
+Can even drill down the resource if required ```kubectl explain <resource>.spec```
 
 ## Deploy a service using kubectl
 
@@ -181,3 +187,10 @@ Note: There are much better and advanced solutions to do this but for the sake o
    web-app-69f8b8cf86-zq8wl   1/1     Running   0          25h
    ```
 
+# Branching
+This is a good time to insert the branching concept. So far i have been using the main branch (also known as master sometimes). However, In production environments, the main branch represents the stable, deployable source of truth and is strictly protected. Committing directly to main introduces the risk of deploying unvetted configurations that could cause outages. Instead, all new features, bug fixes, and infrastructure changes are developed in dedicated branches. This workflow isolates changes, enables automated CI/CD validation and peer code reviews via Pull Requests (PRs), and ensures thatfaulty code can be revised or abandoned without jeopardizing the stability of the live cluster.
+There is some standard to follow (i.e.: feature/ or fix/ or doc/ branches) but this can be customized depending on the company internal standards.
+
+
+
+# This continues in the HELM repo
