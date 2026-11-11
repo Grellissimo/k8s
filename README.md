@@ -1,5 +1,18 @@
-# This repository is intended to collect all my DevOps tests
+# Cloud-Native and DevOps Engineering Lab
+**By Adriano Farina**
 
-1. 001-kubectl-first-steps - A first deployment only using kubectl. First step aimed to learning k8s, deploy, edit, t-shoot, investigate, delete
-2. 002-helming - Reproduces the same deployment, but with professional level tooling.
-3. Coming soon
+Welcome to my personal DevOps and Cloud-Native engineering repository. This project serves as a hands-on, practical showcase of real-world infrastructure, deployment workflows, and modern operational tooling.
+
+Rather than relying purely on theoretical concepts, this repository documents practical execution—building, testing, troubleshooting, and evolving containerized architectures from foundational primitives up to production-grade GitOps delivery.
+
+---
+
+## Roadmap and Exercise Index
+
+1. **[001 - Kubectl First Steps](./001-kubectl-first-steps/)**  
+   Foundational Kubernetes lifecycle management: Provisioning custom namespaces, deploying containerized applications, dynamic scaling, port-forwarding, live in-line editing, and incident root-cause triage (ImagePullBackOff, describe, logs).
+
+2. **[002 - Helming](./002-helming/)**  
+   Transitioning to enterprise packaging: Replacing brittle static manifests with reusable Helm charts, establishing SemVer release management, understanding template rendering, and enforcing multi-environment namespace portability.
+
+3. **003 - Coming Soon**
