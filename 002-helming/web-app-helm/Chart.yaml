@@ -1,0 +1,6 @@
+apiVersion: v2
+name: web-app-helm
+description: A Helm chart for deploying our NGINX web application
+type: application
+version: 0.1.0
+appVersion: "1.25.0"
