@@ -84,6 +84,17 @@ helm install web-app-release ./web-app-helm --namespace demo-lab-helm --create-n
 - `--namespace demo-lab-helm`: Puts everything inside the `demo-lab-helm` namespace.
 - `--create-namespace`: Tells Helm to make the namespace if it does not exist yet.
 
+Output:
+```
+NAME: web-app-release
+LAST DEPLOYED: Wed Nov 11 18:41:43 2026
+NAMESPACE: demo-lab-helm
+STATUS: deployed
+REVISION: 1
+DESCRIPTION: Install complete
+TEST SUITE: None
+```
+
 ### Step 3: Check That Everything is Running
 ```bash
 helm list -n demo-lab-helm
@@ -108,12 +119,49 @@ While the tunnel is running, i can verify it in two ways:
 2. **Via Browser:**
    I can open `http://localhost:8080` to see the "Welcome to nginx!" HTML page. 
 
-### Step 5: Clean Teardown
-To remove the entire app, files are not deleted one by one. Simply i can tell Helm to uninstall:
+### Step 5: Updating the Application (Zero-Downtime Upgrades)
+In production, uninstall and reinstall an app to update it is not the correct way. That causes outages. Instead, Helm uses `upgrade` to trigger a Kubernetes rolling update (new pods spin up and become healthy before old pods are terminated):
+After making some changes, say, to the chart version and the replica number, i can trigger the upgrade and observe:
+
 ```bash
-helm uninstall web-app-release -n demo-lab-helm
+helm upgrade web-app-release ./web-app-helm -n demo-lab-helm
 ```
-And to remove the namespace:
+Helm calculates what changed, applies the diff, and bumps the release to `REVISION: 2`.
+
+### Step 6: Tracking History and Instant Rollbacks
+Helm keeps a full revision history of every deployment:
+
+```bash
+helm history web-app-release -n demo-lab-helm
+```
+Output:
+```
+REVISION	UPDATED                 	STATUS    	CHART             	APP VERSION	DESCRIPTION
+1       	Wed Nov 11 18:41:43 2026	superseded	web-app-helm-0.1.0	1.25.0     	Install complete
+2       	Wed Nov 11 18:55:40 2026	deployed  	web-app-helm-0.2.0	1.25.0     	Upgrade complete
+```
+
+If an update introduces a bug or breaks in production, i can roll back to any previous revision instantly in one command without touching YAML files:
+
+```bash
+helm rollback web-app-release 1 -n demo-lab-helm
+```
+Output:
+```
+REVISION	UPDATED                 	STATUS    	CHART             	APP VERSION	DESCRIPTION
+1       	Wed Nov 11 18:41:43 2026	superseded	web-app-helm-0.1.0	1.25.0     	Install complete
+2       	Wed Nov 11 18:55:40 2026	superseded	web-app-helm-0.2.0	1.25.0     	Upgrade complete
+3       	Wed Nov 11 18:57:07 2026	deployed  	web-app-helm-0.1.0	1.25.0     	Rollback to 1
+```
+
+### Step 7: Clean Teardown
+To remove the app while preserving the release audit trail, i can uninstall with the `--keep-history` flag:
+```bash
+helm uninstall web-app-release -n demo-lab-helm --keep-history
+```
+This tears down all running pods and services to free cluster resources, while keeping the revision records intact.
+
+Finally, to delete the namespace:
 ```bash
 kubectl delete ns demo-lab-helm
 ```
