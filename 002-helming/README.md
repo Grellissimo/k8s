@@ -165,3 +165,86 @@ Finally, to delete the namespace:
 ```bash
 kubectl delete ns demo-lab-helm
 ```
+
+---
+
+# Part 2: Making It Production-Ready (Variabilizing with values.yaml)
+
+Up to this point, the chart was static—numbers, ports, and image names were still hardcoded inside `templates/deployment.yaml` and `templates/service.yaml`.
+
+In a real-world enterprise setting, engineers **never hardcode values** directly inside templates. Instead, we use a central control panel: **`values.yaml`**.
+
+---
+
+## 1. How `values.yaml` Works
+The `values.yaml` is the default settings file. It holds all the variables for the entire chart. Instead of updating the other files, we variabilize it and only update this. Can also have multiple files, depending on the environment it needs to be deployed (dev, prod, etc..)
+
+```yaml
+replicaCount: 1
+
+image:
+  repository: nginx
+  tag: alpine
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+```
+
+---
+
+## 2. How Templates Point at Values (The Real-World Syntax)
+
+Inside the `templates/` folder, the previously hardcoded strings are substituted with placeholders using double curly braces:
+
+### In `templates/deployment.yaml`:
+- **Instead of `replicas: 1`**  
+  We write: `replicas: {{ .Values.replicaCount }}`
+- **Instead of `image: nginx:alpine`**  
+  We write: `image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"`
+
+### In `templates/service.yaml`:
+- **Instead of `type: ClusterIP`**  
+  We write: `type: {{ .Values.service.type }}`
+- **Instead of `port: 80`**  
+  We write: `port: {{ .Values.service.port }}`
+
+> **What does `.Values.` mean?**  
+> The leading dot (`.`) represents the root scope in Helm. `.Values` tells Helm: *"Look inside the `values.yaml` file for this key."*
+
+---
+
+## 3. How Values are Overridden in the Real World
+
+Important Pro: **One single chart can be deployed to any environment by swapping values.**
+
+### Method 1: The Command-Line Override (Only quick Testing)
+I can override any variable on the fly without touching any files:
+```bash
+helm upgrade web-app-release ./web-app-helm-variabilized --set replicaCount=3 -n demo-lab-helm
+```
+*(Instantly scales to 3 pods by overriding `replicaCount` directly via the CLI).*
+
+### Method 2: Environment-Specific Files (Standard DevOps Practice)
+In real teams, we create separate values files for each environment:
+- `values-dev.yaml` (e.g. `replicaCount: 1`, cheaper resources)
+- `values-prod.yaml` (e.g. `replicaCount: 5`, higher CPU/RAM, production domains)
+
+At deployment time, we simply point Helm to the desired environment file:
+```bash
+# Deploy to Dev:
+helm install web-app-dev ./web-app-helm-variabilized -f values-dev.yaml -n dev --create-namespace
+
+# Deploy to Prod:
+helm install web-app-prod ./web-app-helm-variabilized -f values-prod.yaml -n prod --create-namespace
+```
+
+---
+
+## 4. Cleanup
+Once finished testing, remember to clean up the cluster resources:
+```
+helm uninstall web-app-release -n demo-lab-helm --keep-history
+kubectl delete ns demo-lab-helm
+```
