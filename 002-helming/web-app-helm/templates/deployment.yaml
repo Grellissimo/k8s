@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: web-app
+  name: web-app-helm
 spec:
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
-      app: web-app
+      app: web-app-helm
   template:
     metadata:
       labels:
-        app: web-app
+        app: web-app-helm
     spec:
       containers:
       - name: nginx

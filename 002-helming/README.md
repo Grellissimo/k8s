@@ -1,36 +1,34 @@
-# 002 - Helming: Packaging & Release Management
+# 002 - Helming: Packaging and Deploying
 
-While managing workloads using raw `kubectl apply` and static YAML manifests is excellent for foundational learning and quick experiments, it becomes brittle and unmaintainable in production environments. Static manifests lead to hardcoded values, code duplication across environments (Dev, Staging, Prod), and lack release lifecycle management. To resolve this, we transition to **Helm**—the Kubernetes package manager. Helm allows us to parameterize configurations using `values.yaml`, treat the entire stack (Namespace, Deployment, and Service) as a single versioned release, and perform atomic installs, upgrades, and rollbacks.
+In the first exercise, we used raw `kubectl` commands and static YAML files. That was great to learn the basics, but in real life, deploying by hand file-by-file gets messy quickly.
 
----
-
-## Requirements
-- **macOS** with Docker Desktop (Kubernetes / KinD enabled)
-- **`kubectl`** CLI configured to interact with the local cluster
-- **`helm`** CLI (v3+) installed via Homebrew (`brew install helm`)
+This is where **Helm** comes in. Helm is like the Homebrew or App Store for Kubernetes. Instead of running `kubectl apply` on three different files, Helm packages everything together so you can install, update, or delete the whole app with one simple command.
 
 ---
 
-## 1. What is a Helm Chart?
-In Kubernetes, if the cluster is considered the operating system, **Helm is its package manager** (analogous to `brew`, `apt`, or `yum`). 
+## What We Need to Deploy
 
-- A **Chart** is a deployable package (similar to a `.deb` or `.rpm`).
-- It packages together all necessary Kubernetes primitives (Deployments, Services, Ingresses, ConfigMaps) into a single, version-controlled unit.
-- A minimal Helm chart requires:
-  ```text
-  web-app-helm/
-  ├── Chart.yaml             # Metadata (Package name, version, app version)
-  ├── values.yaml            # Default configuration variables (optional in static mode)
-  └── templates/             # Kubernetes manifests (supercharged with Go-templating)
-      ├── deployment.yaml
-      └── service.yaml
-  ```
+Just like in exercise 001, our goal is to have:
+1. **A Namespace (`demo-lab-helm`)**: To keep our app isolated in its own space.
+2. **A Deployment (`web-app-helm`)**: To run our NGINX container and make sure it stays alive (named `web-app-helm` to clearly separate it from our raw kubectl lab).
+3. **A Service (`web-app-helm-service`)**: To act as the internal door and give our pods a stable network address.
 
 ---
 
-## 2. Package Metadata (`Chart.yaml`)
-Every chart must have a `Chart.yaml` at its root acting as its identity card:
+## How Helm Organizes Files
 
+A Helm chart is just a simple folder with a few specific files:
+
+```text
+web-app-helm/
+├── Chart.yaml              # The ID card of the chart (name, version)
+└── templates/              # The actual Kubernetes YAML files
+    ├── deployment.yaml     # Tells K8s how to run the pods
+    └── service.yaml        # Tells K8s how to network the pods
+```
+
+### 1. `Chart.yaml` (The ID Card)
+Every chart must have this file. It simply tells Helm what this package is:
 ```yaml
 apiVersion: v2
 name: web-app-helm
@@ -39,45 +37,214 @@ type: application
 version: 0.1.0
 appVersion: "1.25.0"
 ```
+- `version: 0.1.0`: The version of this Helm folder/chart.
+- `appVersion: "1.25.0"`: The version of the app running inside (NGINX).
 
-### Key Field Breakdown:
-- **`apiVersion: v2`**: Identifies this chart as **Helm 3** compliant. (Helm 2 used `v1` and relied on a deprecated in-cluster component called *Tiller*).
-- **`name: web-app-helm`**: The unique identifier of the package.
-- **`type: application`**: Defines this as a deployable chart (as opposed to a `library` chart used only to share helper logic).
-- **`version: 0.1.0` vs. `appVersion: "1.25.0"` (Critical Architectural Distinction)**:
-  - **`version` (0.1.0)**: The SemVer version of the **Helm chart packaging code**. If templates, ports, or default configs change, bump this number.
-  - **`appVersion` ("1.25.0")**: The version of the **underlying software application** running inside the container (e.g., NGINX version). Bumping the container image tag updates `appVersion`.
+### 2. `templates/deployment.yaml`
+This is almost identical to the deployment file from exercise 001. It tells Kubernetes to run 1 copy of `nginx:alpine` and listen on port 80.
 
----
+### 3. `templates/service.yaml`
+This tells Kubernetes to set up an internal `ClusterIP` network bridge that forwards traffic to any pod with the label `app: web-app-helm`.
 
-## 3. The `templates/` Directory
-The `templates/` folder is a mandatory Helm convention:
-- Helm scans this directory for Kubernetes YAML manifests.
-- While it supports dynamic Go-templating (`{{ .Values... }}`), **templates can also be standard static YAML manifests**.
-- When deploying, Helm parses all files in `templates/`, injects any variables, and submits the rendered output to the Kubernetes API.
+### 4. The Namespace File
 
----
+The catch: there is no `namespace.yaml` file to be created. 
 
-## 4. Architectural Best Practice: Namespace Portability
-Unlike raw `kubectl` manifests where `metadata.namespace` is often hardcoded:
-- **Helm manifests deliberately omit hardcoded namespaces.**
-- **Why?** Hardcoding a namespace locks the chart to a single environment. By omitting it, the exact same chart becomes completely portable across environments using Helm's `--namespace <env> --create-namespace` CLI flag:
-  - `helm install web-app ./web-app-helm -n development --create-namespace`
-  - `helm install web-app ./web-app-helm -n staging --create-namespace`
-  - `helm install web-app ./web-app-helm -n production --create-namespace`
+The namespace gets specified at deployment time directly in the command. Helm will automatically check if that namespace already exists or if it needs to be created on the fly (via the `--create-namespace` flag).
 
----
+This makes the chart **fully reusable**. Instead of hardcoding a namespace and locking the chart to a single place, the exact same package can be deployed across different environments (like `dev`, `staging`, or `production`) without changing a single line of code.
 
-## 5. Learning Roadmap: Static First, Then Variabilized
-1. **Phase 1 (Static Manifests):** Place working static YAML directly inside `templates/` to demonstrate that Helm deploys standard Kubernetes resources out of the box.
-2. **Phase 2 (Parameterization / `values.yaml`):** Extract hardcoded strings (replicas, image tags, ports) into `values.yaml` and reference them dynamically using template syntax.
 
----
+## Step-by-Step Commands
 
-## 6. Pre-flight Validation: `helm template` (Dry Run)
-Before submitting manifests to the cluster, Helm provides a built-in compiler command to preview and validate the rendered output locally:
+### Step 1: Test Before Installing (Dry Run)
+Before touching the cluster, this checks if Helm can read and compile the files properly:
+```bash
+helm template web-app-release ./web-app-helm
+```
+This renders and prints the final YAML to the terminal so the engineer can inspect it before applying.
+
+**What does this catch?**
+- Catches YAML syntax errors, bad indentation, missing colons, or template typos. If something is broken, Helm will immediately throw an error with the exact line number.
+- Note: this runs **offline** on your machine, so it won't verify if the specified Docker image actually exists or if the cluster has enough RAM.
+
+**Additional testing - The Live Cluster Dry-Run:**  
+As additional test, it is possible to validate the deployment against the live cluster and test if Kubernetes will accept the configuration without deploying it yet:
+```bash
+helm install web-app-release ./web-app-helm --namespace demo-lab-helm --dry-run
+```
+
+### Step 2: Install Everything to the Cluster
+Once tested above's commands, I can now run this command to create the namespace and deploy the whole app:
+```bash
+helm install web-app-release ./web-app-helm --namespace demo-lab-helm --create-namespace
+```
+- `web-app-release`: The name given to this running installation.
+- `./web-app-helm`: The path to the chart folder.
+- `--namespace demo-lab-helm`: Puts everything inside the `demo-lab-helm` namespace.
+- `--create-namespace`: Tells Helm to make the namespace if it does not exist yet.
+
+Output:
+```
+NAME: web-app-release
+LAST DEPLOYED: Wed Nov 11 18:41:43 2026
+NAMESPACE: demo-lab-helm
+STATUS: deployed
+REVISION: 1
+DESCRIPTION: Install complete
+TEST SUITE: None
+```
+
+### Step 3: Check That Everything is Running
+```bash
+helm list -n demo-lab-helm
+kubectl get all -n demo-lab-helm
+```
+Can now observe Helm tracking the release, along with the deployment, pod, and service all running inside `demo-lab-helm`.
+
+### Step 4: Test Access via Port-Forward
+Just like the deployment via kubectl, i can tunnel traffic from my laptop:
+```bash
+kubectl port-forward svc/web-app-helm-service 8080:80 -n demo-lab-helm
+```
+
+While the tunnel is running, i can verify it in two ways:
+
+1. **Via `curl` in a second terminal tab:**
+   ```bash
+   curl -I http://localhost:8080
+   ```
+   *Expected output:* `HTTP/1.1 200 OK` with `Server: nginx/...` headers.
+
+2. **Via Browser:**
+   I can open `http://localhost:8080` to see the "Welcome to nginx!" HTML page. 
+
+### Step 5: Updating the Application (Zero-Downtime Upgrades)
+In production, uninstall and reinstall an app to update it is not the correct way. That causes outages. Instead, Helm uses `upgrade` to trigger a Kubernetes rolling update (new pods spin up and become healthy before old pods are terminated):
+After making some changes, say, to the chart version and the replica number, i can trigger the upgrade and observe:
 
 ```bash
-helm template my-release ./web-app-helm
+helm upgrade web-app-release ./web-app-helm -n demo-lab-helm
 ```
-*(Renders and prints the full Kubernetes YAML to the terminal without making changes to the cluster).*
+Helm calculates what changed, applies the diff, and bumps the release to `REVISION: 2`.
+
+### Step 6: Tracking History and Instant Rollbacks
+Helm keeps a full revision history of every deployment:
+
+```bash
+helm history web-app-release -n demo-lab-helm
+```
+Output:
+```
+REVISION	UPDATED                 	STATUS    	CHART             	APP VERSION	DESCRIPTION
+1       	Wed Nov 11 18:41:43 2026	superseded	web-app-helm-0.1.0	1.25.0     	Install complete
+2       	Wed Nov 11 18:55:40 2026	deployed  	web-app-helm-0.2.0	1.25.0     	Upgrade complete
+```
+
+If an update introduces a bug or breaks in production, i can roll back to any previous revision instantly in one command without touching YAML files:
+
+```bash
+helm rollback web-app-release 1 -n demo-lab-helm
+```
+Output:
+```
+REVISION	UPDATED                 	STATUS    	CHART             	APP VERSION	DESCRIPTION
+1       	Wed Nov 11 18:41:43 2026	superseded	web-app-helm-0.1.0	1.25.0     	Install complete
+2       	Wed Nov 11 18:55:40 2026	superseded	web-app-helm-0.2.0	1.25.0     	Upgrade complete
+3       	Wed Nov 11 18:57:07 2026	deployed  	web-app-helm-0.1.0	1.25.0     	Rollback to 1
+```
+
+### Step 7: Clean Teardown
+To remove the app while preserving the release audit trail, i can uninstall with the `--keep-history` flag:
+```bash
+helm uninstall web-app-release -n demo-lab-helm --keep-history
+```
+This tears down all running pods and services to free cluster resources, while keeping the revision records intact.
+
+Finally, to delete the namespace:
+```bash
+kubectl delete ns demo-lab-helm
+```
+
+---
+
+# Part 2: Making It Production-Ready (Variabilizing with values.yaml)
+
+Up to this point, the chart was static—numbers, ports, and image names were still hardcoded inside `templates/deployment.yaml` and `templates/service.yaml`.
+
+In a real-world enterprise setting, engineers **never hardcode values** directly inside templates. Instead, we use a central control panel: **`values.yaml`**.
+
+---
+
+## 1. How `values.yaml` Works
+The `values.yaml` is the default settings file. It holds all the variables for the entire chart. Instead of updating the other files, we variabilize it and only update this. Can also have multiple files, depending on the environment it needs to be deployed (dev, prod, etc..)
+
+```yaml
+replicaCount: 1
+
+image:
+  repository: nginx
+  tag: alpine
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 80
+```
+
+---
+
+## 2. How Templates Point at Values (The Real-World Syntax)
+
+Inside the `templates/` folder, the previously hardcoded strings are substituted with placeholders using double curly braces:
+
+### In `templates/deployment.yaml`:
+- **Instead of `replicas: 1`**  
+  We write: `replicas: {{ .Values.replicaCount }}`
+- **Instead of `image: nginx:alpine`**  
+  We write: `image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"`
+
+### In `templates/service.yaml`:
+- **Instead of `type: ClusterIP`**  
+  We write: `type: {{ .Values.service.type }}`
+- **Instead of `port: 80`**  
+  We write: `port: {{ .Values.service.port }}`
+
+> **What does `.Values.` mean?**  
+> The leading dot (`.`) represents the root scope in Helm. `.Values` tells Helm: *"Look inside the `values.yaml` file for this key."*
+
+---
+
+## 3. How Values are Overridden in the Real World
+
+Important Pro: **One single chart can be deployed to any environment by swapping values.**
+
+### Method 1: The Command-Line Override (Only quick Testing)
+I can override any variable on the fly without touching any files:
+```bash
+helm upgrade web-app-release ./web-app-helm-variabilized --set replicaCount=3 -n demo-lab-helm
+```
+*(Instantly scales to 3 pods by overriding `replicaCount` directly via the CLI).*
+
+### Method 2: Environment-Specific Files (Standard DevOps Practice)
+In real teams, we create separate values files for each environment:
+- `values-dev.yaml` (e.g. `replicaCount: 1`, cheaper resources)
+- `values-prod.yaml` (e.g. `replicaCount: 5`, higher CPU/RAM, production domains)
+
+At deployment time, we simply point Helm to the desired environment file:
+```bash
+# Deploy to Dev:
+helm install web-app-dev ./web-app-helm-variabilized -f values-dev.yaml -n dev --create-namespace
+
+# Deploy to Prod:
+helm install web-app-prod ./web-app-helm-variabilized -f values-prod.yaml -n prod --create-namespace
+```
+
+---
+
+## 4. Cleanup
+Once finished testing, remember to clean up the cluster resources:
+```
+helm uninstall web-app-release -n demo-lab-helm --keep-history
+kubectl delete ns demo-lab-helm
+```
