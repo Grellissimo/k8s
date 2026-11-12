@@ -1,0 +1,42 @@
+name: Docker Build and Container Security Scan
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '003-github-actions/app/**'
+      - '.github/workflows/03-docker-build.yaml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '003-github-actions/app/**'
+      - '.github/workflows/03-docker-build.yaml'
+
+jobs:
+  build-test-and-scan:
+    name: Build, Test and Scan NGINX Image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Build Docker Image
+        run: |
+          docker build -t custom-nginx:latest 003-github-actions/app
+
+      - name: Test Container Startup & Health Check
+        run: |
+          docker run -d --name test-nginx -p 8080:80 custom-nginx:latest
+          sleep 2
+          curl -I http://localhost:8080
+          curl -s http://localhost:8080 | grep "Adriano Farina"
+          docker stop test-nginx
+
+      - name: Scan Built Container Image with Trivy
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'custom-nginx:latest'
+          format: 'table'
+          exit-code: '0'
+          severity: 'CRITICAL,HIGH'
