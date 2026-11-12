@@ -1,0 +1,43 @@
+name: Helm Lint and Test
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '002-helming/**'
+      - '.github/workflows/01-helm-lint.yaml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '002-helming/**'
+      - '.github/workflows/01-helm-lint.yaml'
+
+jobs:
+  lint-and-template:
+    name: Lint and Template Charts
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.14.0'
+
+      - name: Lint web-app-helm (Static Chart)
+        run: |
+          helm lint 002-helming/web-app-helm
+
+      - name: Template web-app-helm (Static Chart)
+        run: |
+          helm template test-release 002-helming/web-app-helm
+
+      - name: Lint web-app-helm-variabilized (Dynamic Chart)
+        run: |
+          helm lint 002-helming/web-app-helm-variabilized
+
+      - name: Template web-app-helm-variabilized (Dynamic Chart)
+        run: |
+          helm template test-release 002-helming/web-app-helm-variabilized
