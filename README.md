@@ -15,4 +15,7 @@ Rather than relying purely on theoretical concepts, this repository documents pr
 2. **[002 - Helming](./002-helming/)**  
    Transitioning to enterprise packaging: Replacing brittle static manifests with reusable Helm charts, establishing SemVer release management, understanding template rendering, and enforcing multi-environment namespace portability.
 
-3. **003 - Coming Soon**
+3. **[003 - GitHub Actions](./003-github-actions/)**  
+   Automated Continuous Integration (CI): Creating cloud workflows to automatically lint manifests, validate Helm charts, compile templates, and protect the main branch with automated test gates.
+
+4. 004 - Coming Soon
