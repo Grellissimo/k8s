@@ -133,7 +133,54 @@ A branch (such as `main` or `feature/argocd`) is a moving target that advances w
 
 ---
 
-## 5. Cleanup
+## 5. Additional Integration: GitHub OAuth SSO & RBAC
+
+Instead of relying only on the local break-glass `admin` account, I wired ArgoCD's built-in **Dex** identity broker (`argocd-dex-server`) to authenticate via **GitHub OAuth** and map my GitHub identity to `role:admin` in RBAC (following the official [ArgoCD User Management & Dex SSO docs](https://argo-cd.readthedocs.io/en/stable/operator-manual/user-management/)).
+
+1. **Create a GitHub OAuth App** (GitHub Settings -> Developer settings -> OAuth Apps -> New OAuth App, or directly via `https://github.com/settings/developers`):
+   - **Homepage URL:** `https://localhost:8080`
+   - **Authorization callback URL:** `https://localhost:8080/api/dex/callback`
+
+2. **Store the Client Secret locally in `argocd-secret`** (never commit OAuth secrets to Git):
+   ```bash
+   kubectl patch secret argocd-secret -n argocd --type merge -p '{"stringData":{"dex.github.clientSecret":"<YOUR_CLIENT_SECRET>"}}'
+   ```
+
+3. **Configure the Dex GitHub connector in `argocd-cm`** (`--type merge` keeps existing keys intact):
+   ```bash
+   kubectl patch configmap argocd-cm -n argocd --type merge -p '
+   data:
+     url: https://localhost:8080
+     dex.config: |
+       connectors:
+         - type: github
+           id: github
+           name: GitHub
+           config:
+             clientID: <GITHUB_CLIENT_ID>
+             clientSecret: $dex.github.clientSecret
+   '
+   ```
+
+4. **Restrict RBAC access in `argocd-rbac-cm`** (deny unmapped users by default and grant `role:admin` to my GitHub email):
+   ```bash
+   kubectl patch configmap argocd-rbac-cm -n argocd --type merge -p '
+   data:
+     policy.default: ""
+     scopes: "[groups, email]"
+     policy.csv: |
+       g, <YOUR_GITHUB_EMAIL>, role:admin
+   '
+   ```
+
+5. **Restart Dex and the ArgoCD server, then re-open port-forward and click "LOG IN VIA GITHUB":**
+   ```bash
+   kubectl rollout restart deployment argocd-dex-server argocd-server -n argocd
+   ```
+
+---
+
+## 6. Cleanup
 To cleanly remove the lab resources:
 ```bash
 kubectl delete -f 004-argocd/application.yaml
