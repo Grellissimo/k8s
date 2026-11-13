@@ -1,0 +1,19 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: demo-web-app-alerts
+  namespace: monitoring
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: demo-web-app-failures
+      rules:
+        - alert: DemoWebAppContainerStuck
+          expr: kube_pod_container_status_waiting_reason{namespace="demo-lab-monitoring", reason=~"ImagePullBackOff|ErrImagePull|CrashLoopBackOff"} > 0
+          for: 30s
+          labels:
+            severity: warning
+          annotations:
+            summary: "Container stuck in {{ $labels.reason }} ({{ $labels.pod }})"
+            description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is waiting due to {{ $labels.reason }}."
