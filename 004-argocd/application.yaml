@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/Grellissimo/k8s.git
-    targetRevision: feature/argocd
+    targetRevision: main
     path: 004-argocd/web-app-argocd-project
     helm:
       releaseName: web-app-argocd-release
