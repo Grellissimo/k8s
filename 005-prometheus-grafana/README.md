@@ -8,23 +8,11 @@ In this module, I implement **Cloud-Native Observability (Metrics, Dashboards, a
 
 ---
 
-## 1. Architecture & Components (`kube-prometheus-stack`)
+## 1. Overview: Prometheus & Grafana
 
-Instead of manually wiring standalone monitoring containers and hand-editing static `prometheus.yml` files, production Kubernetes clusters use the **Prometheus Operator** pattern via the `kube-prometheus-stack` Helm chart:
+**Prometheus** is a time-series monitoring and alerting system built for dynamic environments like Kubernetes. Using a pull (scrape) model, it periodically collects metrics from cluster nodes, pods, and applications via HTTP `/metrics` endpoints, stores them with labels in its time-series database, and evaluates PromQL queries and alert rules when thresholds are breached.
 
-1. **Prometheus Operator:** Watches Kubernetes Custom Resources (`ServiceMonitor`, `PodMonitor`, `PrometheusRule`) so scraping targets and alert thresholds are managed declaratively as YAML.
-2. **Prometheus Server (Pull Model & TSDB):** Periodically scrapes HTTP `/metrics` endpoints (`scrape_interval`), discovers Kubernetes pods dynamically via Service Discovery, stores labeled time-series data in its Time-Series Database (TSDB), and evaluates PromQL queries and alert rules.
-3. **Core Metric Exporters:**
-   - **Node Exporter (DaemonSet):** Collects host-level hardware and OS metrics per node (CPU, RAM, disk, network I/O).
-   - **cAdvisor (built into Kubelet):** Tracks per-container CPU, memory, and filesystem consumption against resource limits.
-   - **`kube-state-metrics`:** Queries the Kubernetes API server to expose Kubernetes object states as metrics (desired vs. available replicas, `Pending` pods, `CrashLoopBackOff`, restart counts).
-4. **Alertmanager:** Receives firing alerts from Prometheus, groups/deduplicates related alerts, applies silences, and routes notifications (Slack, PagerDuty, Email, webhooks).
-5. **Grafana:** Connects to Prometheus as a data source and renders PromQL queries into live cluster, node, namespace, and pod dashboards.
-
-### Metric Types & PromQL Basics
-- **Gauge:** Point-in-time value that goes up or down (memory usage, running pods).
-- **Counter:** Cumulative value that only increases (e.g., `container_restarts_total`, `http_requests_total`), normally queried with `rate(...[5m])`.
-- **Histogram:** Buckets latencies or request sizes to calculate p95/p99 percentiles.
+**Grafana** is the visualization and dashboarding layer that sits on top of Prometheus. It connects to Prometheus as a data source, runs PromQL queries behind the scenes, and turns raw metrics into live graphs, tables, and Kubernetes dashboards for cluster health, resource usage, and pod restarts.
 
 ---
 
@@ -33,6 +21,8 @@ Instead of manually wiring standalone monitoring containers and hand-editing sta
 ```text
 005-prometheus-grafana/
 ├── README.md                           # Architecture notes, Helm deployment, PromQL, and alerting lab
+├── prometheus-rule.yaml                # Custom PrometheusRule alert for stuck containers
+├── values.yaml                         # Helm overrides for kube-prometheus-stack (KinD lab settings)
 └── web-app-monitoring/                 # Target NGINX Helm chart deployed to generate workload metrics
     ├── Chart.yaml                      # Chart metadata
     ├── values.yaml                     # Configurable defaults (replicas, image, port)
@@ -60,23 +50,44 @@ kubectl get all -n demo-lab-monitoring
 ---
 
 ### Step 2: Install `kube-prometheus-stack` via Helm
-Add (or refresh) the official `prometheus-community` Helm repository:
+Add the official `prometheus-community` Helm repository (per the [kube-prometheus-stack chart documentation](https://github.com/prometheus-community/helm-charts/blob/main/charts/kube-prometheus-stack/README.md)):
 ```bash
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo update
 ```
 
-Install the monitoring stack into a dedicated `monitoring` namespace:
+Install the monitoring stack into a dedicated `monitoring` namespace using [values.yaml](./values.yaml):
 ```bash
 helm install monitoring prometheus-community/kube-prometheus-stack \
   --namespace monitoring \
   --create-namespace \
-  --set kubeControllerManager.enabled=false \
-  --set kubeScheduler.enabled=false \
-  --set kubeEtcd.enabled=false
+  -f ./005-prometheus-grafana/values.yaml
 ```
 
 *Note for local KinD / Docker Desktop clusters:* By default, `kube-controller-manager`, `kube-scheduler`, and `etcd` bind their metrics ports to `127.0.0.1` inside the control-plane container, which prevents in-cluster Prometheus pods from reaching them and triggers false `TargetDown` alerts. Disabling those three control-plane scrapers keeps local KinD labs clean (whereas in custom KinD clusters with `0.0.0.0` patches or managed cloud clusters, teams configure those targets explicitly).
+
+#### Post-Install Helm Output & Reference Commands
+After running `helm install`, Helm prints the release notes below for quick status checks, Grafana credentials, and Operator configuration (`https://github.com/prometheus-operator/kube-prometheus`):
+
+```text
+kube-prometheus-stack has been installed. Check its status by running:
+  kubectl --namespace monitoring get pods -l "release=monitoring"
+
+Get Grafana 'admin' user password by running:
+
+  kubectl --namespace monitoring get secrets monitoring-grafana -o jsonpath="{.data.admin-password}" | base64 -d ; echo
+
+Access Grafana local instance:
+
+  export POD_NAME=$(kubectl --namespace monitoring get pod -l "app.kubernetes.io/name=grafana,app.kubernetes.io/instance=monitoring" -oname)
+  kubectl --namespace monitoring port-forward $POD_NAME 3000
+
+Get your grafana admin user password by running:
+
+  kubectl get secret --namespace monitoring -l app.kubernetes.io/component=admin-secret -o jsonpath="{.items[0].data.admin-password}" | base64 --decode ; echo
+
+Visit https://github.com/prometheus-operator/kube-prometheus for instructions on how to create & configure Alertmanager and Prometheus instances using the Operator.
+```
 
 ---
 
@@ -99,7 +110,7 @@ kubectl port-forward svc/monitoring-kube-prometheus-prometheus 9090:9090 -n moni
 ```
 Open `http://localhost:9090`:
 1. Navigate to **Status -> Target health** (or **Status -> Targets**) to verify scrape endpoints are `UP`.
-2. Open the **Graph** view and test PromQL queries:
+2. From the **Graph** view and test PromQL queries:
    - Check target health: `up`
    - Count pods per namespace: `sum by (namespace) (kube_pod_info)`
    - Inspect container restarts: `kube_pod_container_status_restarts_total{namespace="demo-lab-monitoring"}`
@@ -122,13 +133,22 @@ Open `http://localhost:3000`, log in, and explore the pre-provisioned **Dashboar
 
 ---
 
-### Step 6: Test Alerting Thresholds (`PrometheusRule` + Alertmanager)
-1. Create a custom `PrometheusRule` threshold (or trigger a failing pod in `demo-lab-monitoring`, such as an intentional `ImagePullBackOff` / `CrashLoopBackOff` test workload) and watch Prometheus transition the alert from **Inactive** -> **Pending** -> **Firing** in the **Alerts** tab (`http://localhost:9090/alerts`).
-2. Port-forward **Alertmanager** to see how Prometheus forwards and groups the firing alert:
+### Step 6: Test Custom Alerting Thresholds (`PrometheusRule` + Alertmanager)
+Prometheus is not limited to built-in default rules—alerting is completely customizable using declarative **`PrometheusRule`** YAML manifests. Teams write custom rules tailored to specific failure modes they care about (such as containers stuck in `ImagePullBackOff` or `CrashLoopBackOff`) with custom wait durations (`for:`) and severity levels (`warning`, `critical`).
+
+1. **Create and apply a custom `PrometheusRule` (`prometheus-rule.yaml`):**
+   Define an alert watching `kube_pod_container_status_waiting_reason{namespace="demo-lab-monitoring", reason=~"ImagePullBackOff|ErrImagePull|CrashLoopBackOff"} > 0` (tagged with `release: monitoring` so Prometheus Operator picks it up automatically):
+   ```bash
+   kubectl apply -f 005-prometheus-grafana/prometheus-rule.yaml
+   ```
+2. **Simulate a failing pod in `demo-lab-monitoring`:**
+   Trigger a temporary `ImagePullBackOff` pod (`kubectl run broken-pod --image=nginx:does-not-exist -n demo-lab-monitoring`) and watch Prometheus transition the custom alert from **Inactive** -> **Pending** -> **Firing** in the **Alerts** tab (`http://localhost:9090/alerts`).
+3. **Inspect the alert in Alertmanager:**
+   Port-forward **Alertmanager** to see how Prometheus forwards and groups the firing alert:
    ```bash
    kubectl port-forward svc/monitoring-kube-prometheus-alertmanager 9093:9093 -n monitoring
    ```
-   Open `http://localhost:9093` and verify the active alert is listed and grouped cleanly.
+   Open `http://localhost:9093` and verify the active alert is listed and grouped cleanly, then remove the test pod (`kubectl delete pod broken-pod -n demo-lab-monitoring`).
 
 ---
 
