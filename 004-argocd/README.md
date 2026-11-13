@@ -27,6 +27,7 @@ To simulate this exact scenario:
 ```text
 004-argocd/
 ├── README.md                           # Documentation & architecture notes
+├── application.yaml                    # Declarative ArgoCD Application manifest
 └── web-app-argocd-project/             # Helm chart for the target workload
     ├── Chart.yaml                      # Chart metadata
     ├── values.yaml                     # Configurable defaults (replicas, image, port)
@@ -96,14 +97,39 @@ Instead of clicking buttons in the UI, true GitOps declares the ArgoCD Applicati
 - Points to the path: `004-argocd/web-app-argocd-project`
 - Points to the destination namespace: `demo-lab-argocd`
 
-Apply the application manifest so ArgoCD takes over the existing release.
+Apply the application manifest so ArgoCD takes over the existing release:
+```bash
+kubectl apply -f 004-argocd/application.yaml
+```
+Because the workload is already running from Step 1, ArgoCD initially shows the application as **`Healthy`** and **`OutOfSync`** (missing ArgoCD tracking metadata). Clicking **Sync** -> **Synchronize** in the UI adopts the existing `Deployment` and `Service` under GitOps management with zero downtime.
 
 ---
 
 ### Step 5: Test GitOps Capabilities
-1. **Sync Modes:** Practice manual "Click to Deploy" sync vs automated sync.
-2. **Drift Detection & Self-Healing:** Manually scale or edit the deployment with `kubectl`, observe ArgoCD flag the application as `OutOfSync`, and watch it self-heal.
-3. **Rollbacks:** Test reverting changes via Git and observing immediate cluster reconciliation.
+
+1. **Manual Drift Detection (Manual Sync Mode):**
+   Instead of enabling `selfHeal`, I kept ArgoCD in manual sync mode so it detects drift immediately while leaving final sync approval to an operator:
+   ```bash
+   kubectl scale deployment/web-app-argocd-project --replicas=3 -n demo-lab-argocd
+   ```
+   ArgoCD kept the pods **`Healthy`**, flipped the status to **`OutOfSync`**, highlighted the `replicas` mismatch in **App Diff**, and scaled back down once I clicked **Sync** -> **Synchronize**.
+
+2. **Deploying from Immutable Git Tags (`v0.4.0` and `v0.4.1`):**
+   I created annotated Git tags on commits with `2` replicas (`v0.4.0`) and `3` replicas (`v0.4.1`) in `values.yaml` and pushed each tag explicitly to GitHub:
+   ```bash
+   git tag -a v0.4.0 -m "Release v0.4.0 with 2 replicas"
+   git push origin v0.4.0
+
+   git tag -a v0.4.1 -m "Release v0.4.1 with 3 replicas"
+   git push origin v0.4.1
+   ```
+   By editing the application's **Target Revision** in ArgoCD (**Details -> Summary -> Edit**), I switched cleanly from `v0.4.0` (`2` pods) to `v0.4.1` (`3` pods).
+
+3. **Rollbacks:**
+   Using **History and Rollback** in the ArgoCD UI, I reverted the live deployment from `v0.4.1` (`3` pods) back to `v0.4.0` (`2` pods). ArgoCD stores the exact commit SHA of each past sync, so rolling back restores the cluster immediately while marking the app **`OutOfSync`** until **Target Revision** (or Git via `git revert`) is updated to match.
+
+#### How Branches and Tags Work Together in GitOps
+A branch (such as `main` or `feature/argocd`) is a moving target that advances with every new commit, whereas an annotated Git tag (`v0.4.0`, `v0.4.1`) is a frozen snapshot anchored permanently to one exact commit SHA—even if the feature branch is later merged or deleted. In a clean release workflow, developers work and test on feature branches, merge verified changes into `main` via Pull Request, and then create a release tag directly on `main`. Pointing ArgoCD at a release tag instead of a moving branch ensures deployments and rollbacks always target an immutable, verified version of the manifests.
 
 ---
 
