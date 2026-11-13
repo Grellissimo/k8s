@@ -139,7 +139,7 @@ Instead of relying only on the local break-glass `admin` account, I wired ArgoCD
 
 1. **Create a GitHub OAuth App** (GitHub Settings -> Developer settings -> OAuth Apps -> New OAuth App, or directly via `https://github.com/settings/developers`):
    - **Homepage URL:** `https://localhost:8080`
-   - **Authorization callback URL:** `https://localhost:8080/api/dex/callback`
+   - **Redirect URI (or Authorization callback URL):** `https://localhost:8080/api/dex/callback`
 
 2. **Store the Client Secret locally in `argocd-secret`** (never commit OAuth secrets to Git):
    ```bash
@@ -159,6 +159,7 @@ Instead of relying only on the local break-glass `admin` account, I wired ArgoCD
            config:
              clientID: <GITHUB_CLIENT_ID>
              clientSecret: $dex.github.clientSecret
+             redirectURI: https://localhost:8080/api/dex/callback
    '
    ```
 
@@ -173,9 +174,10 @@ Instead of relying only on the local break-glass `admin` account, I wired ArgoCD
    '
    ```
 
-5. **Restart Dex and the ArgoCD server, then re-open port-forward and click "LOG IN VIA GITHUB":**
+5. **Restart Dex and the ArgoCD server, re-open `port-forward`, and click "LOG IN VIA GITHUB":**
    ```bash
    kubectl rollout restart deployment argocd-dex-server argocd-server -n argocd
+   kubectl port-forward svc/argocd-server 8080:443 -n argocd
    ```
 
 ---
