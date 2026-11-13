@@ -20,3 +20,6 @@ Rather than relying purely on theoretical concepts, this repository documents pr
 
 4. **[004 - ArgoCD](./004-argocd/)**  
    Declarative GitOps Continuous Delivery (CD): Zero-downtime adoption of an existing Helm workload, manual drift detection, immutable Git tag releases and UI rollbacks, and GitHub OAuth SSO via Dex with RBAC.
+
+5. **[005 - Prometheus & Grafana](./005-prometheus-grafana/)**  
+   Cloud-native observability stack (`kube-prometheus-stack`): Operator-driven Prometheus metrics scraping, PromQL queries, pre-built Grafana Kubernetes dashboards, `kube-state-metrics`, and Alertmanager alert threshold testing.
