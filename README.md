@@ -18,4 +18,5 @@ Rather than relying purely on theoretical concepts, this repository documents pr
 3. **[003 - GitHub Actions](./003-github-actions/)**  
    Automated Continuous Integration (CI): Creating cloud workflows to automatically lint manifests, validate Helm charts, compile templates, and protect the main branch with automated test gates.
 
-4. 004 - Coming Soon
+4. **[004 - ArgoCD](./004-argocd/)**  
+   Declarative GitOps Continuous Delivery (CD): Zero-downtime adoption of an existing Helm workload, manual drift detection, immutable Git tag releases and UI rollbacks, and GitHub OAuth SSO via Dex with RBAC.
