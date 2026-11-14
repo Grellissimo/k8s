@@ -93,7 +93,7 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.pas
 
 ### Step 4: Define the Declarative ArgoCD Application Manifest
 Instead of clicking buttons in the UI, true GitOps declares the ArgoCD Application as code (`application.yaml`):
-- Points to the Git repository: `https://github.com/Grellissimo/k8s`
+- Points to the Git repository: `https://github.com/adrianofarina/devops-portfolio`
 - Points to the path: `004-argocd/web-app-argocd-project`
 - Points to the destination namespace: `demo-lab-argocd`
 
