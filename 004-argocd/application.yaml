@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/Grellissimo/k8s.git
+    repoURL: https://github.com/adrianofarina/devops-portfolio.git
     targetRevision: main
     path: 004-argocd/web-app-argocd-project
     helm:

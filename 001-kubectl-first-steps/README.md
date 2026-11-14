@@ -5,7 +5,7 @@ Testing k8s-git-kubectl-helm-argocd-prometheus-grafana
 # Preparation
 1. Create a folder where the project will reside
 2. Clone the repo from github  
-```git clone git@github.com:Grellissimo/k8s.git```
+```git clone git@github.com:adrianofarina/devops-portfolio.git```
 3. Navigate into the folder, and initialize your preferred git manager. I use lazygit as i find it easy to use compared the CLI
 4. Create a new k8s cluster if not already available. This can be done in many different ways, for simplicity, i'll use a KinD (kubernetes in docker) cluster directly created by docker desktop. A much professional solution would definitely be something like AWS EKS.  
 4.1 After waiting some minutes, run ```kubectl get nodes``` to ensure cluster is ready
